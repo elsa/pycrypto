@@ -1,0 +1,147 @@
+name: Publish to CodeArtifact
+
+# Builds pycrypto and publishes it to AWS CodeArtifact so consumers (e.g.
+# braze-message) can `pip install` it instead of cloning this repo.
+# Version/validation logic lives in elsa/ai-shared-workflows; the build uses
+# setuptools (setup.py + C extensions) and twine upload because Poetry publish
+# does not support this legacy packaging layout.
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Overrides version from pyproject.toml - for this run only"
+        required: false
+        type: string
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-1
+  CODEARTIFACT_DOMAIN: cts
+  CODEARTIFACT_REPOSITORY: pycrypto
+
+jobs:
+  publish:
+    name: Publish to CodeArtifact
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.8"
+
+      - name: Install Poetry
+        shell: bash
+        run: pip install poetry
+
+      - name: Resolve version
+        id: version
+        uses: elsa/ai-shared-workflows/.github/actions/resolve-version@main
+        with:
+          version_override: ${{ inputs.version }}
+
+      - name: Sync version into setuptools metadata
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          sed -i "s/'version':\"[^\"]*\"/'version':\"${VERSION}\"/" setup.py
+          sed -i "s/__version__ = '[^']*'/__version__ = '${VERSION}'/" lib/Crypto/__init__.py
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_CODEARTIFACT_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure CodeArtifact repository exists
+        uses: elsa/ai-shared-workflows/.github/actions/codeartifact-repository-validation@main
+        with:
+          domain: ${{ env.CODEARTIFACT_DOMAIN }}
+          repository: ${{ env.CODEARTIFACT_REPOSITORY }}
+          region: ${{ env.AWS_REGION }}
+
+      - name: Build and publish to CodeArtifact
+        shell: bash
+        env:
+          CODEARTIFACT_DOMAIN: ${{ env.CODEARTIFACT_DOMAIN }}
+          CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_REPOSITORY }}
+          CODEARTIFACT_REGION: ${{ env.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libgmp-dev autoconf
+          python -m pip install --upgrade pip build twine
+          python -m build
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          token="$(aws codeartifact get-authorization-token \
+            --domain "${CODEARTIFACT_DOMAIN}" \
+            --domain-owner "${account_id}" \
+            --region "${CODEARTIFACT_REGION}" \
+            --query authorizationToken \
+            --output text)"
+          echo "::add-mask::${token}"
+          endpoint="$(aws codeartifact get-repository-endpoint \
+            --domain "${CODEARTIFACT_DOMAIN}" \
+            --domain-owner "${account_id}" \
+            --repository "${CODEARTIFACT_REPOSITORY}" \
+            --region "${CODEARTIFACT_REGION}" \
+            --format pypi \
+            --query repositoryEndpoint \
+            --output text)"
+          TWINE_USERNAME=aws TWINE_PASSWORD="${token}" \
+            twine upload --repository-url "${endpoint}" dist/*
+
+  notify-slack:
+    name: Notify Slack
+    runs-on: ubuntu-latest
+    needs: publish
+    if: always()
+
+    steps:
+      - name: Compose message
+        id: msg
+        shell: bash
+        env:
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          VERSION: ${{ needs.publish.outputs.version }}
+          REPOSITORY: ${{ github.event.repository.name }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          if [ "${PUBLISH_RESULT}" = "success" ]; then
+            echo "emoji=:rocket:" >> "$GITHUB_OUTPUT"
+            echo "text=:white_check_mark: *Success* — *${REPOSITORY}* \`${VERSION:-unknown}\` published to CodeArtifact by \`${ACTOR}\`" >> "$GITHUB_OUTPUT"
+          else
+            echo "emoji=:rotating_light:" >> "$GITHUB_OUTPUT"
+            echo "text=:x: *Failed* (\`${PUBLISH_RESULT}\`) — *${REPOSITORY}* publish to CodeArtifact by \`${ACTOR}\`" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send Slack notification
+        uses: elsa/ai-shared-workflows/.github/actions/slack-notification@main
+        with:
+          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          channel: '#cts-alerts'
+          icon_emoji: ${{ steps.msg.outputs.emoji }}
+          username: 'codeartifact-publisher'
+          title: 'CodeArtifact Publish'
+          text: ${{ steps.msg.outputs.text }}
