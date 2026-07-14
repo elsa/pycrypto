@@ -2,6 +2,7 @@
 /dist/
 /build/
 /Doc/apidoc/
+*.egg-info/
 
 # Ignore these files:
 *.py[co]

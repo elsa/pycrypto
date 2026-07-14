@@ -2,9 +2,9 @@ name: Publish to CodeArtifact
 
 # Builds pycrypto and publishes it to AWS CodeArtifact so consumers (e.g.
 # braze-message) can `pip install` it instead of cloning this repo.
-# Version/validation logic lives in elsa/ai-shared-workflows; the build uses
-# setuptools (setup.py + C extensions) and twine upload because Poetry publish
-# does not support this legacy packaging layout.
+# Version/validation/publish logic lives in elsa/ai-shared-workflows.
+# Native build deps (autoconf/libgmp) are installed here; packaging is Poetry
+# metadata + setuptools PEP 517 (`setup.py` compiles the C extensions).
 on:
   push:
     tags:
@@ -52,20 +52,18 @@ jobs:
         shell: bash
         run: pip install poetry
 
+      - name: Install native build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libgmp-dev autoconf
+
       - name: Resolve version
         id: version
         uses: elsa/ai-shared-workflows/.github/actions/resolve-version@main
         with:
           version_override: ${{ inputs.version }}
-
-      - name: Sync version into setuptools metadata
-        shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          sed -i "s/'version':\"[^\"]*\"/'version':\"${VERSION}\"/" setup.py
-          sed -i "s/__version__ = '[^']*'/__version__ = '${VERSION}'/" lib/Crypto/__init__.py
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
@@ -80,36 +78,12 @@ jobs:
           repository: ${{ env.CODEARTIFACT_REPOSITORY }}
           region: ${{ env.AWS_REGION }}
 
-      - name: Build and publish to CodeArtifact
-        shell: bash
-        env:
-          CODEARTIFACT_DOMAIN: ${{ env.CODEARTIFACT_DOMAIN }}
-          CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_REPOSITORY }}
-          CODEARTIFACT_REGION: ${{ env.AWS_REGION }}
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y libgmp-dev autoconf
-          python -m pip install --upgrade pip build twine
-          python -m build
-          account_id="$(aws sts get-caller-identity --query Account --output text)"
-          token="$(aws codeartifact get-authorization-token \
-            --domain "${CODEARTIFACT_DOMAIN}" \
-            --domain-owner "${account_id}" \
-            --region "${CODEARTIFACT_REGION}" \
-            --query authorizationToken \
-            --output text)"
-          echo "::add-mask::${token}"
-          endpoint="$(aws codeartifact get-repository-endpoint \
-            --domain "${CODEARTIFACT_DOMAIN}" \
-            --domain-owner "${account_id}" \
-            --repository "${CODEARTIFACT_REPOSITORY}" \
-            --region "${CODEARTIFACT_REGION}" \
-            --format pypi \
-            --query repositoryEndpoint \
-            --output text)"
-          TWINE_USERNAME=aws TWINE_PASSWORD="${token}" \
-            twine upload --repository-url "${endpoint}" dist/*
+      - name: Publish to CodeArtifact
+        uses: elsa/ai-shared-workflows/.github/actions/publish-codeartifact@main
+        with:
+          domain: ${{ env.CODEARTIFACT_DOMAIN }}
+          repository: ${{ env.CODEARTIFACT_REPOSITORY }}
+          region: ${{ env.AWS_REGION }}
 
   notify-slack:
     name: Notify Slack

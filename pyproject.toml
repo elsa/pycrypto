@@ -6,7 +6,22 @@ authors = ["Darsey Litzenberger <dlitz@dlitz.net>"]
 license = "Public Domain"
 readme = "README.md"
 repository = "https://github.com/elsa/pycrypto"
+packages = [{ include = "Crypto", from = "lib" }]
+include = [
+    { path = "src/**/*", format = "sdist" },
+    { path = "configure", format = "sdist" },
+    { path = "config.h.in", format = "sdist" },
+    { path = "buildenv.in", format = "sdist" },
+    { path = "Makefile.pre.in", format = "sdist" },
+    { path = "MANIFEST.in", format = "sdist" },
+    { path = "setup.py", format = "sdist" },
+]
 
+[tool.poetry.dependencies]
+python = ">=3.8"
+
+# Native extensions still build via setuptools + setup.py (autoconf / libgmp).
+# Poetry publishes through PEP 517 using that backend.
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"

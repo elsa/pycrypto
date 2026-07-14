@@ -45,6 +45,17 @@ import distutils.sysconfig
 import os, sys, re
 import struct
 
+
+def _version_from_pyproject():
+    """Single source of truth: [tool.poetry].version in pyproject.toml."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyproject.toml")
+    with open(path, "r") as f:
+        for line in f:
+            m = re.match(r'^version\s*=\s*"([^"]+)"\s*$', line)
+            if m:
+                return m.group(1)
+    raise RuntimeError("version not found in pyproject.toml")
+
 if sys.version[0:1] == '1':
     raise RuntimeError ("The Python Cryptography Toolkit requires "
                          "Python 2.x or 3.x to build.")
@@ -385,7 +396,7 @@ class TestCommand(Command):
     sub_commands = [ ('build', None) ]
 
 kw = {'name':"pycrypto",
-      'version':"2.7a1",  # See also: lib/Crypto/__init__.py
+      'version': _version_from_pyproject(),
       'description':"Cryptographic modules for Python.",
       'author':"Darsey Litzenberger",
       'author_email':"dlitz@dlitz.net",
