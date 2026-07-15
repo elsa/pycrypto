@@ -1,10 +1,11 @@
 name: Publish to CodeArtifact
 
-# Builds pycrypto and publishes it to AWS CodeArtifact so consumers (e.g.
-# braze-message) can `pip install` it instead of cloning this repo.
-# Version/validation/publish logic lives in elsa/ai-shared-workflows.
-# Native build deps (autoconf/libgmp) are installed here; packaging is Poetry
-# metadata + setuptools PEP 517 (`setup.py` compiles the C extensions).
+# Builds pycrypto and publishes it to AWS CodeArtifact so consumers can
+# `pip install` it. Self-contained (no private org actions) because this
+# repo is public and cannot resolve elsa/ai-shared-workflows.
+#
+# Packaging: Poetry metadata + setuptools PEP 517 (setup.py compiles C
+# extensions). Bump version in pyproject.toml before tagging.
 on:
   push:
     tags:
@@ -48,10 +49,6 @@ jobs:
         with:
           python-version: "3.8"
 
-      - name: Install Poetry
-        shell: bash
-        run: pip install poetry
-
       - name: Install native build dependencies
         shell: bash
         run: |
@@ -59,11 +56,34 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgmp-dev autoconf
 
+      - name: Install build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install poetry build twine
+
       - name: Resolve version
         id: version
-        uses: elsa/ai-shared-workflows/.github/actions/resolve-version@main
-        with:
-          version_override: ${{ inputs.version }}
+        shell: bash
+        env:
+          VERSION_OVERRIDE: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          PYPROJECT_VERSION="$(poetry version -s)"
+          if [ -n "${VERSION_OVERRIDE}" ]; then
+            VERSION="${VERSION_OVERRIDE}"
+            poetry version "${VERSION}"
+            echo "Using override version: ${VERSION} (pyproject was ${PYPROJECT_VERSION})"
+          else
+            VERSION="${PYPROJECT_VERSION}"
+            if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "${VERSION}" ]; then
+              echo "::error::Tag '${GITHUB_REF_NAME}' does not match pyproject.toml version '${VERSION}'. pyproject is the source of truth — bump it before tagging."
+              exit 1
+            fi
+            echo "Using pyproject version: ${VERSION}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
@@ -72,18 +92,48 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Ensure CodeArtifact repository exists
-        uses: elsa/ai-shared-workflows/.github/actions/codeartifact-repository-validation@main
-        with:
-          domain: ${{ env.CODEARTIFACT_DOMAIN }}
-          repository: ${{ env.CODEARTIFACT_REPOSITORY }}
-          region: ${{ env.AWS_REGION }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          if aws codeartifact describe-repository \
+            --domain "${CODEARTIFACT_DOMAIN}" \
+            --domain-owner "${account_id}" \
+            --repository "${CODEARTIFACT_REPOSITORY}" \
+            --region "${AWS_REGION}" >/dev/null 2>&1; then
+            echo "CodeArtifact repository '${CODEARTIFACT_REPOSITORY}' already exists in domain '${CODEARTIFACT_DOMAIN}'."
+          else
+            echo "Creating CodeArtifact repository '${CODEARTIFACT_REPOSITORY}' in domain '${CODEARTIFACT_DOMAIN}'..."
+            aws codeartifact create-repository \
+              --domain "${CODEARTIFACT_DOMAIN}" \
+              --domain-owner "${account_id}" \
+              --repository "${CODEARTIFACT_REPOSITORY}" \
+              --region "${AWS_REGION}"
+          fi
 
-      - name: Publish to CodeArtifact
-        uses: elsa/ai-shared-workflows/.github/actions/publish-codeartifact@main
-        with:
-          domain: ${{ env.CODEARTIFACT_DOMAIN }}
-          repository: ${{ env.CODEARTIFACT_REPOSITORY }}
-          region: ${{ env.AWS_REGION }}
+      - name: Build and publish to CodeArtifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          token="$(aws codeartifact get-authorization-token \
+            --domain "${CODEARTIFACT_DOMAIN}" \
+            --domain-owner "${account_id}" \
+            --region "${AWS_REGION}" \
+            --query authorizationToken \
+            --output text)"
+          echo "::add-mask::${token}"
+          endpoint="$(aws codeartifact get-repository-endpoint \
+            --domain "${CODEARTIFACT_DOMAIN}" \
+            --domain-owner "${account_id}" \
+            --repository "${CODEARTIFACT_REPOSITORY}" \
+            --format pypi \
+            --region "${AWS_REGION}" \
+            --query repositoryEndpoint \
+            --output text)"
+          python -m build
+          TWINE_USERNAME=aws TWINE_PASSWORD="${token}" \
+            twine upload --repository-url "${endpoint}" dist/*
 
   notify-slack:
     name: Notify Slack
@@ -92,30 +142,31 @@ jobs:
     if: always()
 
     steps:
-      - name: Compose message
-        id: msg
+      - name: Send Slack notification
         shell: bash
         env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
           VERSION: ${{ needs.publish.outputs.version }}
           REPOSITORY: ${{ github.event.repository.name }}
           ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
-          if [ "${PUBLISH_RESULT}" = "success" ]; then
-            echo "emoji=:rocket:" >> "$GITHUB_OUTPUT"
-            echo "text=:white_check_mark: *Success* — *${REPOSITORY}* \`${VERSION:-unknown}\` published to CodeArtifact by \`${ACTOR}\`" >> "$GITHUB_OUTPUT"
-          else
-            echo "emoji=:rotating_light:" >> "$GITHUB_OUTPUT"
-            echo "text=:x: *Failed* (\`${PUBLISH_RESULT}\`) — *${REPOSITORY}* publish to CodeArtifact by \`${ACTOR}\`" >> "$GITHUB_OUTPUT"
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            echo "SLACK_WEBHOOK_URL not set; skipping notification."
+            exit 0
           fi
-
-      - name: Send Slack notification
-        uses: elsa/ai-shared-workflows/.github/actions/slack-notification@main
-        with:
-          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          channel: '#cts-alerts'
-          icon_emoji: ${{ steps.msg.outputs.emoji }}
-          username: 'codeartifact-publisher'
-          title: 'CodeArtifact Publish'
-          text: ${{ steps.msg.outputs.text }}
+          if [ "${PUBLISH_RESULT}" = "success" ]; then
+            emoji=":rocket:"
+            text=":white_check_mark: *Success* — *${REPOSITORY}* \`${VERSION:-unknown}\` published to CodeArtifact by \`${ACTOR}\`"
+          else
+            emoji=":rotating_light:"
+            text=":x: *Failed* (\`${PUBLISH_RESULT}\`) — *${REPOSITORY}* publish to CodeArtifact by \`${ACTOR}\`"
+          fi
+          payload="$(jq -n \
+            --arg channel "#cts-alerts" \
+            --arg username "codeartifact-publisher" \
+            --arg icon_emoji "${emoji}" \
+            --arg text "CodeArtifact Publish\n${text}" \
+            '{channel:$channel, username:$username, icon_emoji:$icon_emoji, text:$text}')"
+          curl -fsS -X POST -H 'Content-type: application/json' --data "${payload}" "${SLACK_WEBHOOK_URL}"
