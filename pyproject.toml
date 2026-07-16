@@ -1,10 +1,10 @@
 [tool.poetry]
 name = "pycrypto"
-version = "2.7a1"
+version = "2.6.1"
 description = "Cryptographic modules for Python."
 authors = ["Darsey Litzenberger <dlitz@dlitz.net>"]
 license = "Public Domain"
-readme = "README.md"
+readme = "README"
 repository = "https://github.com/elsa/pycrypto"
 packages = [{ include = "Crypto", from = "lib" }]
 include = [
@@ -20,8 +20,8 @@ include = [
 [tool.poetry.dependencies]
 python = ">=3.8"
 
-# Native extensions still build via setuptools + setup.py (autoconf / libgmp).
-# Poetry publishes through PEP 517 using that backend.
+# Native extensions still build via legacy setup.py (autoconf / libgmp).
+# setuptools<58 keeps pycrypto's build_py_2to3 path available for Python 3 wheels.
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools<58", "wheel"]
 build-backend = "setuptools.build_meta"

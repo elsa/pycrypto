@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          pip install poetry build twine
+          pip install poetry 'setuptools<58' wheel twine
 
       - name: Resolve version
         id: version
@@ -131,7 +131,7 @@ jobs:
             --region "${AWS_REGION}" \
             --query repositoryEndpoint \
             --output text)"
-          python -m build
+          python setup.py sdist bdist_wheel
           TWINE_USERNAME=aws TWINE_PASSWORD="${token}" \
             twine upload --repository-url "${endpoint}" dist/*
 
