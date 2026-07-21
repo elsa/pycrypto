@@ -31,7 +31,7 @@ As an example, a sender may encrypt a message in this way:
         >>> from Crypto.Cipher import PKCS1_OAEP
         >>> from Crypto.PublicKey import RSA
         >>>
-        >>> message = b'To be encrypted'
+        >>> message = 'To be encrypted'
         >>> key = RSA.importKey(open('pubkey.der').read())
         >>> cipher = PKCS1_OAEP.new(key)
         >>> ciphertext = cipher.encrypt(message)
@@ -55,7 +55,7 @@ __revision__ = "$Id$"
 __all__ = [ 'new', 'PKCS1OAEP_Cipher' ]
 
 import Crypto.Signature.PKCS1_PSS
-import Crypto.Hash.SHA1
+import Crypto.Hash.SHA
 
 from Crypto.Util.py3compat import *
 import Crypto.Util.number
@@ -70,17 +70,17 @@ class PKCS1OAEP_Cipher:
         
         :Parameters:
          key : an RSA key object
-                If a private half is given, both encryption and decryption are possible.
-                If a public half is given, only encryption is possible.
+          If a private half is given, both encryption and decryption are possible.
+          If a public half is given, only encryption is possible.
          hashAlgo : hash object
                 The hash function to use. This can be a module under `Crypto.Hash`
                 or an existing hash object created from any of such modules. If not specified,
-                `Crypto.Hash.SHA1` is used.
+                `Crypto.Hash.SHA` (that is, SHA-1) is used.
          mgfunc : callable
                 A mask generation function that accepts two parameters: a string to
                 use as seed, and the lenth of the mask to generate, in bytes.
                 If not specified, the standard MGF1 is used (a safe choice).
-         label : byte string
+         label : string
                 A label to apply to this particular encryption. If not specified,
                 an empty string is used. Specifying a label does not improve
                 security.
@@ -93,7 +93,7 @@ class PKCS1OAEP_Cipher:
         if hashAlgo:
             self._hashObj = hashAlgo
         else:
-            self._hashObj = Crypto.Hash.SHA1
+            self._hashObj = Crypto.Hash.SHA
 
         if mgfunc:
             self._mgf = mgfunc
@@ -117,12 +117,12 @@ class PKCS1OAEP_Cipher:
         section 7.1.1 of RFC3447.
     
         :Parameters:
-         message : byte string
+         message : string
                 The message to encrypt, also known as plaintext. It can be of
                 variable length, but not longer than the RSA modulus (in bytes)
                 minus 2, minus twice the hash output size.
    
-        :Return: A byte string, the ciphertext in which the message is encrypted.
+        :Return: A string, the ciphertext in which the message is encrypted.
             It is as long as the RSA modulus (in bytes).
         :Raise ValueError:
             If the RSA key length is not sufficiently long to deal with the given
@@ -173,10 +173,10 @@ class PKCS1OAEP_Cipher:
         section 7.1.2 of RFC3447.
     
         :Parameters:
-         ct : byte string
+         ct : string
                 The ciphertext that contains the message to recover.
    
-        :Return: A byte string, the original message.
+        :Return: A string, the original message.
         :Raise ValueError:
             If the ciphertext length is incorrect, or if the decryption does not
             succeed.
@@ -238,12 +238,12 @@ def new(key, hashAlgo=None, mgfunc=None, label=b('')):
      hashAlgo : hash object
       The hash function to use. This can be a module under `Crypto.Hash`
       or an existing hash object created from any of such modules. If not specified,
-      `Crypto.Hash.SHA1` is used.
+      `Crypto.Hash.SHA` (that is, SHA-1) is used.
      mgfunc : callable
       A mask generation function that accepts two parameters: a string to
       use as seed, and the lenth of the mask to generate, in bytes.
       If not specified, the standard MGF1 is used (a safe choice).
-     label : byte string
+     label : string
       A label to apply to this particular encryption. If not specified,
       an empty string is used. Specifying a label does not improve
       security.

@@ -24,8 +24,6 @@
  * Country of origin: Canada
  */
 
-#include "pycrypto_common.h"
-
 /* Setting this will cause LibTomCrypt to return CRYPT_INVALID_ARG when its
  * assert-like LTC_ARGCHK macro fails. */
 #define ARGTYPE 4
@@ -33,7 +31,10 @@
 /* Include the actial DES implementation */
 #include "libtom/tomcrypt_des.c"
 
+#undef DES  /* this is needed because tomcrypt_custom.h defines DES to an empty string */
+
 #include <assert.h>
+#include "Python.h"
 
 typedef struct {
     symmetric_key sk;
@@ -48,11 +49,7 @@ static void ltcseterr(int rc)
         break;
 
     case CRYPT_INVALID_KEYSIZE:
-#ifdef PCT_DES3_MODULE
         PyErr_SetString(PyExc_ValueError, "Invalid key size (must be either 16 or 24 bytes long)");
-#else
-        PyErr_SetString(PyExc_ValueError, "Invalid key size (must be 8 bytes long)");
-#endif
         break;
 
     case CRYPT_INVALID_ROUNDS:
@@ -69,33 +66,13 @@ static void block_init(block_state *self, unsigned char *key, int keylen)
 {
     int rc;
 #ifdef PCT_DES3_MODULE
-    int i;
-    unsigned char keybuf[24];
-    if (keylen == 16) {
-        /* "Two-key 3DES" mode, where the 3DES key is K1,K2,K1 */
-        for (i = 0; i < 16; i++) {
-            keybuf[i] = key[i];
-        }
-        for (i = 0; i < 8; i++) {
-            keybuf[i+16] = key[i];
-        }
-        rc = des3_setup(keybuf, 24, 0, &self->sk);
-        for (i = 0; i < 24; i++) {  /* TODO: securely zeroize this */
-            keybuf[i] = 0;
-        }
-    } else {
-        rc = des3_setup(key, keylen, 0, &self->sk);
-    }
+    rc = des3_setup(key, keylen, 0, &self->sk);
 #else
     rc = des_setup(key, keylen, 0, &self->sk);
 #endif
     if (rc != CRYPT_OK) {
         ltcseterr(rc);
     }
-}
-
-static void block_finalize(block_state *self)
-{
 }
 
 static void block_encrypt(block_state *self, unsigned char *in, unsigned char *out)

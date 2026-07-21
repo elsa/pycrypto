@@ -59,30 +59,4 @@ def b2a_hex(s):
     # For completeness
     return binascii.b2a_hex(s)
 
-def handle_fastmath_import_error():
-    import Crypto.PublicKey
-    import imp
-    try:
-        file, pathname, description = imp.find_module("_fastmath", Crypto.PublicKey.__path__)
-    except ImportError:
-        sys.stderr.write("SelfTest: warning: not testing _fastmath module (not available)\n")
-    else:
-        file.close()
-        raise ImportError("While the _fastmath module exists, importing "
-            "it failed. This may point to the gmp or mpir shared library "
-            "not being in the path. _fastmath was found at %s" % (pathname,))
-
-def docstrings_disabled():
-    """Returns True if docstrings are disabled (e.g. by using python -OO)"""
-    return docstrings_disabled.__doc__ is None
-
-def assert_disabled():
-    """Returns True if 'assert' is a no-op (e.g. by using python -O)"""
-    try:
-        assert False
-    except AssertionError:
-        return False
-    else:
-        return True
-
 # vim:set ts=4 sw=4 sts=4 expandtab:

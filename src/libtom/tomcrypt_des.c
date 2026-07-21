@@ -6,16 +6,16 @@
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@gmail.com, http://libtom.org
+ * Tom St Denis, tomstdenis@gmail.com, http://libtomcrypt.com
  */
 #include "tomcrypt.h"
 
 /** 
   @file des.c
-  LTC_DES code submitted by Dobes Vandermeer 
+  DES code submitted by Dobes Vandermeer 
 */
 
-#ifdef LTC_DES
+#ifdef DES
 
 #define EN0 0 
 #define DE1 1
@@ -1519,7 +1519,7 @@ static void desfunc(ulong32 *block, const ulong32 *keys)
 #endif
 
  /**
-    Initialize the LTC_DES block cipher
+    Initialize the DES block cipher
     @param key The symmetric key you wish to pass
     @param keylen The key length in bytes
     @param num_rounds The number of rounds desired (0 for default)
@@ -1546,7 +1546,7 @@ static int des_setup(const unsigned char *key, int keylen, int num_rounds, symme
 }
 
  /**
-    Initialize the 3LTC_DES-EDE block cipher
+    Initialize the 3DES-EDE block cipher
     @param key The symmetric key you wish to pass
     @param keylen The key length in bytes
     @param num_rounds The number of rounds desired (0 for default)
@@ -1562,23 +1562,33 @@ static int des3_setup(const unsigned char *key, int keylen, int num_rounds, symm
         return CRYPT_INVALID_ROUNDS;
     }
 
-    if (keylen != 24) {
+    if (keylen != 24 && keylen != 16) {
         return CRYPT_INVALID_KEYSIZE;
     }
 
     deskey(key,    EN0, skey->des3.ek[0]);
     deskey(key+8,  DE1, skey->des3.ek[1]);
-    deskey(key+16, EN0, skey->des3.ek[2]);
+    if (keylen == 24) {
+        deskey(key+16, EN0, skey->des3.ek[2]);
+    } else {
+        /* two-key 3DES: K3=K1 */
+        deskey(key, EN0, skey->des3.ek[2]);
+    }
 
     deskey(key,    DE1, skey->des3.dk[2]);
     deskey(key+8,  EN0, skey->des3.dk[1]);
-    deskey(key+16, DE1, skey->des3.dk[0]);
+    if (keylen == 24) {
+        deskey(key+16, DE1, skey->des3.dk[0]);
+    } else {
+        /* two-key 3DES: K3=K1 */
+        deskey(key, DE1, skey->des3.dk[0]);
+    }
 
     return CRYPT_OK;
 }
 
 /**
-  Encrypts a block of text with LTC_DES
+  Encrypts a block of text with DES
   @param pt The input plaintext (8 bytes)
   @param ct The output ciphertext (8 bytes)
   @param skey The key as scheduled
@@ -1599,7 +1609,7 @@ static int des_ecb_encrypt(const unsigned char *pt, unsigned char *ct, symmetric
 }
 
 /**
-  Decrypts a block of text with LTC_DES
+  Decrypts a block of text with DES
   @param ct The input ciphertext (8 bytes)
   @param pt The output plaintext (8 bytes)
   @param skey The key as scheduled 
@@ -1620,7 +1630,7 @@ static int des_ecb_decrypt(const unsigned char *ct, unsigned char *pt, symmetric
 }
 
 /**
-  Encrypts a block of text with 3LTC_DES-EDE
+  Encrypts a block of text with 3DES-EDE
   @param pt The input plaintext (8 bytes)
   @param ct The output ciphertext (8 bytes)
   @param skey The key as scheduled
@@ -1644,7 +1654,7 @@ static int des3_ecb_encrypt(const unsigned char *pt, unsigned char *ct, symmetri
 }
 
 /**
-  Decrypts a block of text with 3LTC_DES-EDE
+  Decrypts a block of text with 3DES-EDE
   @param ct The input ciphertext (8 bytes)
   @param pt The output plaintext (8 bytes)
   @param skey The key as scheduled 
@@ -1667,7 +1677,7 @@ static int des3_ecb_decrypt(const unsigned char *ct, unsigned char *pt, symmetri
 }
 
 /**
-  Performs a self-test of the LTC_DES block cipher
+  Performs a self-test of the DES block cipher
   @return CRYPT_OK if functional, CRYPT_NOP if self-test has been disabled
 */
 static int des_test(void)
@@ -1898,5 +1908,5 @@ static int des3_keysize(int *keysize)
 
 
 /* $Source: /cvs/libtom/libtomcrypt/src/ciphers/des.c,v $ */
-/* $Revision: 1.15 $ */
-/* $Date: 2007/05/12 14:20:27 $ */
+/* $Revision: 1.13 $ */
+/* $Date: 2006/11/08 23:01:06 $ */

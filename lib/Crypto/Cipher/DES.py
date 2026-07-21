@@ -33,12 +33,12 @@ DES should not be used for new designs. Use `AES`.
 
 As an example, encryption can be done as follows:
 
-    >>> from Crypto.Cipher import DES
+    >>> from Crypto.Cipher import DES3
     >>> from Crypto import Random
     >>>
-    >>> key = b'-8B key-'
-    >>> iv = Random.new().read(DES.block_size)
-    >>> cipher = DES.new(key, DES.MODE_OFB, iv)
+    >>> key = b'Sixteen byte key'
+    >>> iv = Random.new().read(DES3.block_size)
+    >>> cipher = DES3.new(key, DES3.MODE_OFB, iv)
     >>> plaintext = b'sona si latine loqueris '
     >>> msg = iv + cipher.encrypt(plaintext)
 
@@ -58,7 +58,7 @@ class DESCipher(blockalgo.BlockAlgo):
 
     def __init__(self, key, *args, **kwargs):
         """Initialize a DES cipher object
-
+        
         See also `new()` at the module level."""
         blockalgo.BlockAlgo.__init__(self, _DES, key, *args, **kwargs)
 
@@ -74,8 +74,6 @@ def new(key, *args, **kwargs):
         The chaining mode to use for encryption or decryption.
         Default is `MODE_ECB`.
       IV : byte string
-        (*Only* `MODE_CBC`, `MODE_CFB`, `MODE_OFB`, `MODE_OPENPGP`).
-
         The initialization vector to use for encryption or decryption.
         
         It is ignored for `MODE_ECB` and `MODE_CTR`.
@@ -84,20 +82,13 @@ def new(key, *args, **kwargs):
         and `block_size` +2 bytes for decryption (in the latter case, it is
         actually the *encrypted* IV which was prefixed to the ciphertext).
         It is mandatory.
-
-        For all other modes, it must be 8 bytes long.
-      nonce : byte string
-        (*Only* `MODE_EAX`).
-        A mandatory value that must never be reused for any other encryption.
-        There are no restrictions on its length, but it is recommended to
-        use at least 16 bytes.
+       
+        For all other modes, it must be `block_size` bytes longs. It is optional and
+        when not present it will be given a default value of all zeroes.
       counter : callable
         (*Only* `MODE_CTR`). A stateful function that returns the next
         *counter block*, which is a byte string of `block_size` bytes.
         For better performance, use `Crypto.Util.Counter`.
-      mac_len : integer
-        (*Only* `MODE_EAX`). Length of the MAC, in bytes.
-        It must be no larger than 8 (which is the default).
       segment_size : integer
         (*Only* `MODE_CFB`).The number of bits the plaintext and ciphertext
         are segmented in.
@@ -121,8 +112,6 @@ MODE_OFB = 5
 MODE_CTR = 6
 #: OpenPGP Mode. See `blockalgo.MODE_OPENPGP`.
 MODE_OPENPGP = 7
-#: EAX Mode. See `blockalgo.MODE_EAX`.
-MODE_EAX = 9
 #: Size of a data block (in bytes)
 block_size = 8
 #: Size of a key (in bytes)

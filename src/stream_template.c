@@ -24,7 +24,17 @@
  * ===================================================================
  */
 
-#include "pycrypto_common.h"
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#ifdef _HAVE_STDC_HEADERS
+#include <string.h>
+#endif
+
+#include "Python.h"
+#include "pycrypto_compat.h"
 #include "modsupport.h"
 
 #define _STR(x) #x
@@ -53,7 +63,14 @@ typedef struct
 /* Please see PEP3123 for a discussion of PyObject_HEAD and changes made in 3.x to make it conform to Standard C.
  * These changes also dictate using Py_TYPE to check type, and PyVarObject_HEAD_INIT(NULL, 0) to initialize
  */
+#ifdef IS_PY3K
+static PyTypeObject ALGtype;
+#define is_ALGobject(v)		(Py_TYPE(v) == &ALGtype)
+#else
 staticforward PyTypeObject ALGtype;
+#define is_ALGobject(v)		((v)->ob_type == &ALGtype)
+#define PyLong_FromLong PyInt_FromLong /* For Python 2.x */
+#endif
 
 static ALGobject *
 newALGobject(void)
@@ -183,34 +200,47 @@ ALG_Decrypt(ALGobject *self, PyObject *args)
 /* ALGobject methods */
 static PyMethodDef ALGmethods[] =
  {
+#ifdef IS_PY3K
 	{"encrypt", (PyCFunction) ALG_Encrypt, METH_O, ALG_Encrypt__doc__},
 	{"decrypt", (PyCFunction) ALG_Decrypt, METH_O, ALG_Decrypt__doc__},
+#else
+	{"encrypt", (PyCFunction) ALG_Encrypt, 0, ALG_Encrypt__doc__},
+	{"decrypt", (PyCFunction) ALG_Decrypt, 0, ALG_Decrypt__doc__},
+#endif
  	{NULL, NULL}			/* sentinel */
  };
 
 static PyObject *
+#ifdef IS_PY3K
 ALGgetattro(PyObject *self, PyObject *attr)
+#else
+ALGgetattr(PyObject *self, char *name)
+#endif
 {
-	if (!PyString_Check(attr))
+#ifdef IS_PY3K
+	if (!PyUnicode_Check(attr))
 		goto generic;
 
-	if (PyString_CompareWithASCIIString(attr, "block_size") == 0)
+	if (PyUnicode_CompareWithASCIIString(attr, "block_size") == 0)
+#else
+	if (strcmp(name, "block_size") == 0)
+#endif
 	{
-		return PyInt_FromLong(BLOCK_SIZE);
+		return PyLong_FromLong(BLOCK_SIZE);
 	}
-	if (PyString_CompareWithASCIIString(attr, "key_size") == 0)
+#ifdef IS_PY3K
+	if (PyUnicode_CompareWithASCIIString(attr, "key_size") == 0)
+#else
+	if (strcmp(name, "key_size") == 0)
+#endif
 	{
-		return PyInt_FromLong(KEY_SIZE);
+		return PyLong_FromLong(KEY_SIZE);
 	}
+#ifdef IS_PY3K
   generic:
-#if PYTHON_API_VERSION >= 1011          /* Python 2.2 and later */
 	return PyObject_GenericGetAttr(self, attr);
 #else
-	if (PyString_Check(attr) < 0) {
-		PyErr_SetObject(PyExc_AttributeError, attr);
-		return NULL;
-	}
-	return Py_FindMethod(ALGmethods, (PyObject *)self, PyString_AsString(attr));
+	return Py_FindMethod(ALGmethods, self, name);
 #endif
 }
 
@@ -225,18 +255,28 @@ static struct PyMethodDef modulemethods[] =
 
 static PyTypeObject ALGtype =
  {
+#ifdef IS_PY3K
 	PyVarObject_HEAD_INIT(NULL, 0)  /* deferred type init for compilation on Windows, type will be filled in at runtime */
+#else
+	PyObject_HEAD_INIT(NULL)
+	0,				/*ob_size*/
+#endif
  	_MODULE_STRING,		/*tp_name*/
  	sizeof(ALGobject),	/*tp_size*/
  	0,				/*tp_itemsize*/
  	/* methods */
 	(destructor) ALGdealloc,	/*tp_dealloc*/
  	0,				/*tp_print*/
+#ifdef IS_PY3K
 	0,				/*tp_getattr*/
+#else
+	ALGgetattr,		/*tp_getattr*/
+#endif
 	0,				/*tp_setattr*/
 	0,				/*tp_compare*/
 	0,				/*tp_repr*/
  	0,				/*tp_as_number*/
+#ifdef IS_PY3K
 	0,				/*tp_as_sequence*/
 	0,				/*tp_as_mapping*/
 	0,				/*tp_hash*/
@@ -251,7 +291,6 @@ static PyTypeObject ALGtype =
 	0,				/*tp_clear*/
 	0,				/*tp_richcompare*/
 	0,				/*tp_weaklistoffset*/
-#if PYTHON_API_VERSION >= 1011          /* Python 2.2 and later */
 	0,				/*tp_iter*/
 	0,				/*tp_iternext*/
 	ALGmethods,		/*tp_methods*/
@@ -274,64 +313,52 @@ static PyTypeObject ALGtype =
 
 /* Initialization function for the module */
 
-PyMODINIT_FUNC
-_MODULE_NAME (void)
-{
-	PyObject *m = NULL;
-	PyObject *__all__ = NULL;
-
-	if (PyType_Ready(&ALGtype) < 0)
-		goto errout;
+/* Deal with old API in Python 2.1 */
+#if PYTHON_API_VERSION < 1011
+#define PyModule_AddIntConstant(m,n,v) {PyObject *o=PyInt_FromLong(v); \
+           if (o!=NULL) \
+             {PyDict_SetItemString(PyModule_GetDict(m),n,o); Py_DECREF(o);}}
+#endif
 
 #ifdef IS_PY3K
+PyMODINIT_FUNC
+#else
+void
+#endif
+ _MODULE_NAME (void)
+ {
+ 	PyObject *m, *d, *x;
+ 
+#ifdef IS_PY3K
+	/* PyType_Ready automatically fills in ob_type with &PyType_Type if it's not already set */
+	if (PyType_Ready(&ALGtype) < 0)
+		return NULL;
+
 	/* Create the module and add the functions */
 	m = PyModule_Create(&moduledef);
+	if (m == NULL)
+        	return NULL;
 #else
+	ALGtype.ob_type = &PyType_Type;
 	/* Create the module and add the functions */
 	m = Py_InitModule("Crypto.Cipher." _MODULE_STRING, modulemethods);
 #endif
-	if (m == NULL)
-		goto errout;
-
-	/* Add the type object to the module (using the name of the module itself),
-	 * so that its methods docstrings are discoverable by introspection tools. */
-	PyObject_SetAttrString(m, _MODULE_STRING, (PyObject *)&ALGtype);
-
-	/* Add some symbolic constants to the module */
-	PyModule_AddIntConstant(m, "block_size", BLOCK_SIZE);
+ 
+ 	/* Add some symbolic constants to the module */
+ 	d = PyModule_GetDict(m);
+	x = PyUnicode_FromString(_MODULE_STRING ".error");
+ 	PyDict_SetItemString(d, "error", x);
+ 
+ 	PyModule_AddIntConstant(m, "block_size", BLOCK_SIZE);
 	PyModule_AddIntConstant(m, "key_size", KEY_SIZE);
 
-	/* Create __all__ (to help generate documentation) */
-	__all__ = PyList_New(4);
-	if (__all__ == NULL)
-		goto errout;
-	PyList_SetItem(__all__, 0, PyString_FromString(_MODULE_STRING));	/* This is the ALGType object */
-	PyList_SetItem(__all__, 1, PyString_FromString("new"));
-	PyList_SetItem(__all__, 2, PyString_FromString("block_size"));
-	PyList_SetItem(__all__, 3, PyString_FromString("key_size"));
-	PyObject_SetAttrString(m, "__all__", __all__);
+ 	/* Check for errors */
+ 	if (PyErr_Occurred())
+ 		Py_FatalError("can't initialize module " _MODULE_STRING);
 
-out:
-	/* Final error check */
-	if (m == NULL && !PyErr_Occurred()) {
-		PyErr_SetString(PyExc_ImportError, "can't initialize module");
-		goto errout;
-	}
-
-	/* Free local objects here */
-	Py_CLEAR(__all__);
-
-	/* Return */
 #ifdef IS_PY3K
 	return m;
-#else
-	return;
 #endif
-
-errout:
-	/* Free the module and other global objects here */
-	Py_CLEAR(m);
-	goto out;
-}
-
+ }
+ 
 /* vim:set ts=4 sw=4 sts=0 noexpandtab: */

@@ -42,7 +42,7 @@
 
 */
 
-#include "pycrypto_common.h"
+#include "Python.h"
 
 #define MODULE_NAME _CAST
 #define BLOCK_SIZE 8
@@ -50,8 +50,8 @@
 
 /* adjust these according to your compiler/platform. On some machines
    uint32 will have to be a long. It's OK if uint32 is more than 32 bits. */
-typedef uint32_t uint32;
-typedef uint8_t uint8;
+typedef unsigned int uint32;
+typedef unsigned char uint8;
 
 /* this struct probably belongs in cast.h */
 typedef struct {
@@ -432,11 +432,6 @@ block_init(block_state *self, unsigned char *key, int keylength)
 
 	/* do the actual key schedule setup */
 	castschedulekeys(self, key, keylength);
-}
-
-static void
-block_finalize(block_state* self)
-{
 }
 
 static void
