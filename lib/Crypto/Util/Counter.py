@@ -43,14 +43,11 @@ An example of usage is the following:
 
     >>> from Crypto.Cipher import AES
     >>> from Crypto.Util import Counter
-    >>> from Crypto import Random
     >>>
-    >>> nonce = Random.get_random_bytes(8)
-    >>> ctr = Counter.new(64, nonce)
-    >>> key = b'AES-128 symm key'
-    >>> plaintext = b'X'*1000000
-    >>> cipher = AES.new(key, AES.MODE_CTR, counter=ctr)
-    >>> ciphertext = cipher.encrypt(plaintext)
+    >>> pt = b'\x00'*1000000
+    >>> ctr = Counter.new(128)
+    >>> cipher = AES.new(b'\x00'*16, AES.MODE_CTR, counter=ctr)
+    >>> ct = cipher.encrypt(pt)
 
 :undocumented: __package__
 """
@@ -59,23 +56,19 @@ if sys.version_info[0] == 2 and sys.version_info[1] == 1:
     from Crypto.Util.py21compat import *
 from Crypto.Util.py3compat import *
 
-from Crypto.pct_warnings import DisableShortcut_DeprecationWarning
 from Crypto.Util import _counter
 import struct
-import warnings
-
 
 # Factory function
-_deprecated = "deprecated"
-def new(nbits, prefix=b(""), suffix=b(""), initial_value=1, overflow=0, little_endian=False, allow_wraparound=False, disable_shortcut=_deprecated):
+def new(nbits, prefix=b(""), suffix=b(""), initial_value=1, overflow=0, little_endian=False, allow_wraparound=False, disable_shortcut=False):
     """Create a stateful counter block function suitable for CTR encryption modes.
 
     Each call to the function returns the next counter block.
     Each counter block is made up by three parts::
-
+ 
       prefix || counter value || postfix
 
-    The counter value is incremented by 1 at each call.
+    The counter value is incremented by one at each call.
 
     :Parameters:
       nbits : integer
@@ -88,18 +81,17 @@ def new(nbits, prefix=b(""), suffix=b(""), initial_value=1, overflow=0, little_e
         used.
       initial_value : integer
         The initial value of the counter. Default value is 1.
-      overflow : integer
-        This value is currently ignored.
       little_endian : boolean
-        If *True*, the counter number will be encoded in little endian format.
-        If *False* (default), in big endian format.
+        If True, the counter number will be encoded in little endian format.
+        If False (default), in big endian format.
       allow_wraparound : boolean
-        If *True*, the counter will automatically restart from zero after
-        reaching the maximum value (``2**nbits-1``).
-        If *False* (default), the object will raise an *OverflowError*.
-      disable_shortcut : deprecated
-        This option is a no-op for backward compatibility.  It will be removed
-        in a future version.  Don't use it.
+        If True, the function will raise an *OverflowError* exception as soon
+        as the counter wraps around. If False (default), the counter will
+        simply restart from zero.
+      disable_shortcut : boolean
+        If True, do not make ciphers from `Crypto.Cipher` bypass the Python
+        layer when invoking the counter block function.
+        If False (default), bypass the Python layer.
     :Returns:
       The counter block function.
     """
@@ -116,13 +108,10 @@ def new(nbits, prefix=b(""), suffix=b(""), initial_value=1, overflow=0, little_e
 
     initval = _encode(initial_value, nbytes, little_endian)
 
-    if disable_shortcut is not _deprecated:  # exact object comparison
-        warnings.warn("disable_shortcut has no effect and is deprecated", DisableShortcut_DeprecationWarning)
-
     if little_endian:
-        return _counter._newLE(bstr(prefix), bstr(suffix), initval, allow_wraparound=allow_wraparound)
+        return _counter._newLE(bstr(prefix), bstr(suffix), initval, allow_wraparound=allow_wraparound, disable_shortcut=disable_shortcut)
     else:
-        return _counter._newBE(bstr(prefix), bstr(suffix), initval, allow_wraparound=allow_wraparound)
+        return _counter._newBE(bstr(prefix), bstr(suffix), initval, allow_wraparound=allow_wraparound, disable_shortcut=disable_shortcut)
 
 def _encode(n, nbytes, little_endian=False):
     retval = []

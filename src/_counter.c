@@ -22,22 +22,32 @@
  * ===================================================================
  */
 
-#include "pycrypto_common.h"
 #include <assert.h>
 #include <stddef.h>
 #include <string.h>
+#include "Python.h"
+#include "pycrypto_compat.h"
 #include "_counter.h"
+
+#ifndef IS_PY3K
+#define PyLong_FromLong PyInt_FromLong
+#endif
 
 /* NB: This can be called multiple times for a given object, via the __init__ method.  Be careful. */
 static int
 CounterObject_init(PCT_CounterObject *self, PyObject *args, PyObject *kwargs)
 {
+#ifdef IS_PY3K
     PyBytesObject *prefix=NULL, *suffix=NULL, *initval=NULL;
+#else
+	PyStringObject *prefix=NULL, *suffix=NULL, *initval=NULL;
+#endif
     int allow_wraparound = 0;
+    int disable_shortcut = 0;
     Py_ssize_t size;
 
-    static char *kwlist[] = {"prefix", "suffix", "initval", "allow_wraparound", NULL};
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "SSS|i", kwlist, &prefix, &suffix, &initval, &allow_wraparound))
+    static char *kwlist[] = {"prefix", "suffix", "initval", "allow_wraparound", "disable_shortcut", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "SSS|ii", kwlist, &prefix, &suffix, &initval, &allow_wraparound, &disable_shortcut))
         return -1;
 
     /* Check string size and set nbytes */
@@ -96,7 +106,6 @@ CounterObject_init(PCT_CounterObject *self, PyObject *args, PyObject *kwargs)
 
     /* Sanity-check pointers */
     assert(self->val <= self->p);
-    assert(self->buf_size >= 0);
     assert(self->p + self->nbytes <= self->val + self->buf_size);
     assert(self->val + PyBytes_GET_SIZE(self->prefix) == self->p);
     assert(PyBytes_GET_SIZE(self->prefix) + self->nbytes + PyBytes_GET_SIZE(self->suffix) == self->buf_size);
@@ -106,7 +115,8 @@ CounterObject_init(PCT_CounterObject *self, PyObject *args, PyObject *kwargs)
     memcpy(self->p, PyBytes_AS_STRING(initval), self->nbytes);
     memcpy(self->p + self->nbytes, PyBytes_AS_STRING(suffix), PyBytes_GET_SIZE(suffix));
 
-    /* Set allow_wraparound */
+    /* Set shortcut_disabled and allow_wraparound */
+    self->shortcut_disabled = disable_shortcut;
     self->allow_wraparound = allow_wraparound;
 
     /* Clear the carry flag */
@@ -151,7 +161,7 @@ _CounterObject_next_value(PCT_CounterObject *self, int little_endian)
         goto err_out;
     }
 
-    eight = PyInt_FromLong(8);
+    eight = PyLong_FromLong(8);
     if (!eight)
         goto err_out;
 
@@ -176,7 +186,7 @@ _CounterObject_next_value(PCT_CounterObject *self, int little_endian)
 
         /* ch = ord(p) */
         Py_CLEAR(ch);   /* delete old ch */
-        ch = PyInt_FromLong((long) *p);
+        ch = PyLong_FromLong((long) *p);
         if (!ch)
             goto err_out;
 
@@ -296,59 +306,92 @@ static PyMethodDef CounterBEObject_methods[] = {
  * so we hack it here. */
 
 static PyObject *
+#ifdef IS_PY3K
 CounterLEObject_getattro(PyObject *s, PyObject *attr)
+#else
+CounterLEObject_getattr(PyObject *s, char *name)
+#endif
 {
     PCT_CounterObject *self = (PCT_CounterObject *)s;
-    if (!PyString_Check(attr))
-        goto generic;
+#ifdef IS_PY3K
+	if (!PyUnicode_Check(attr))
+		goto generic;
 
-    if (PyString_CompareWithASCIIString(attr, "carry") == 0) {
-        return PyInt_FromLong((long)self->carry);
-    }
-  generic:
-#if PYTHON_API_VERSION >= 1011          /* Python 2.2 and later */
-    return PyObject_GenericGetAttr(s, attr);
+	if (PyUnicode_CompareWithASCIIString(attr, "carry") == 0) {
 #else
-    if (PyString_Check(attr) < 0) {
-        PyErr_SetObject(PyExc_AttributeError, attr);
-        return NULL;
+    if (strcmp(name, "carry") == 0) {
+#endif
+        return PyLong_FromLong((long)self->carry);
+#ifdef IS_PY3K
+    } else if (!self->shortcut_disabled && PyUnicode_CompareWithASCIIString(attr, "__PCT_CTR_SHORTCUT__") == 0) {
+#else
+    } else if (!self->shortcut_disabled && strcmp(name, "__PCT_CTR_SHORTCUT__") == 0) {
+#endif
+        /* Shortcut hack - See block_template.c */
+        Py_INCREF(Py_True);
+        return Py_True;
     }
-    return Py_FindMethod(CounterLEObject_methods, (PyObject *)self, PyString_AsString(attr));
+#ifdef IS_PY3K
+  generic:
+	return PyObject_GenericGetAttr(s, attr);
+#else
+    return Py_FindMethod(CounterLEObject_methods, (PyObject *)self, name);
 #endif
 }
 
 static PyObject *
+#ifdef IS_PY3K
 CounterBEObject_getattro(PyObject *s, PyObject *attr)
+#else
+CounterBEObject_getattr(PyObject *s, char *name)
+#endif
 {
     PCT_CounterObject *self = (PCT_CounterObject *)s;
-    if (!PyString_Check(attr))
-        goto generic;
+#ifdef IS_PY3K
+	if (!PyUnicode_Check(attr))
+		goto generic;
 
-    if (PyString_CompareWithASCIIString(attr, "carry") == 0) {
-        return PyInt_FromLong((long)self->carry);
-    }
-  generic:
-#if PYTHON_API_VERSION >= 1011          /* Python 2.2 and later */
-    return PyObject_GenericGetAttr(s, attr);
+	if (PyUnicode_CompareWithASCIIString(attr, "carry") == 0) {
 #else
-    if (PyString_Check(attr) < 0) {
-        PyErr_SetObject(PyExc_AttributeError, attr);
-        return NULL;
+    if (strcmp(name, "carry") == 0) {
+#endif
+        return PyLong_FromLong((long)self->carry);
+#ifdef IS_PY3K
+    } else if (!self->shortcut_disabled && PyUnicode_CompareWithASCIIString(attr, "__PCT_CTR_SHORTCUT__") == 0) {
+#else
+    } else if (!self->shortcut_disabled && strcmp(name, "__PCT_CTR_SHORTCUT__") == 0) {
+#endif
+        /* Shortcut hack - See block_template.c */
+        Py_INCREF(Py_True);
+        return Py_True;
     }
-    return Py_FindMethod(CounterBEObject_methods, (PyObject *)self, PyString_AsString(attr));
+#ifdef IS_PY3K
+  generic:
+	return PyObject_GenericGetAttr(s, attr);
+#else
+    return Py_FindMethod(CounterBEObject_methods, (PyObject *)self, name);
 #endif
 }
 
 static PyTypeObject
-PCT_CounterLEType = {
+my_CounterLEType = {
+#ifdef IS_PY3K
 	PyVarObject_HEAD_INIT(NULL, 0)  /* deferred type init for compilation on Windows, type will be filled in at runtime */
+#else
+    PyObject_HEAD_INIT(NULL)
+    0,                              /* ob_size */
+#endif
 	"_counter.CounterLE",           /* tp_name */
 	sizeof(PCT_CounterObject),       /* tp_basicsize */
     0,                              /* tp_itemsize */
 	/* methods */
     (destructor)CounterObject_dealloc, /* tp_dealloc */
     0,                              /* tp_print */
-    0,                              /* tp_getattr */
+#ifdef IS_PY3K
+	0,								/* tp_getattr */
+#else
+    CounterLEObject_getattr,        /* tp_getattr */
+#endif
     0,                              /* tp_setattr */
     0,                              /* tp_compare */
     0,                              /* tp_repr */
@@ -358,16 +401,20 @@ PCT_CounterLEType = {
     0,                              /* tp_hash */
     (ternaryfunc)CounterObject_call, /* tp_call */
     0,                              /* tp_str */
-    CounterLEObject_getattro,       /* tp_getattro */
+#ifdef IS_PY3K
+	CounterLEObject_getattro,		 /* tp_getattro */
+#else
+    0,                              /* tp_getattro */
+#endif
     0,                              /* tp_setattro */
     0,                              /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT,             /* tp_flags */
     "Counter (little endian)",      /* tp_doc */
+#ifdef IS_PY3K
 	0,								/*tp_traverse*/
 	0,								/*tp_clear*/
 	0,								/*tp_richcompare*/
 	0,								/*tp_weaklistoffset*/
-#if PYTHON_API_VERSION >= 1011          /* Python 2.2 and later */
 	0,								/*tp_iter*/
 	0,								/*tp_iternext*/
 	CounterLEObject_methods,		/*tp_methods*/
@@ -375,14 +422,23 @@ PCT_CounterLEType = {
 };
 
 static PyTypeObject
-PCT_CounterBEType = {
+my_CounterBEType = {
+#ifdef IS_PY3K
 	PyVarObject_HEAD_INIT(NULL, 0)  /* deferred type init for compilation on Windows, type will be filled in at runtime */
+#else
+    PyObject_HEAD_INIT(NULL)
+    0,                              /* ob_size */
+#endif
 	"_counter.CounterBE",           /* tp_name */
 	sizeof(PCT_CounterObject),       /* tp_basicsize */
     0,                              /* tp_itemsize */
     (destructor)CounterObject_dealloc, /* tp_dealloc */
     0,                              /* tp_print */
-    0,                              /* tp_getattr */
+#ifdef IS_PY3K
+	0,								/* tp_getattr */
+#else
+    CounterBEObject_getattr,        /* tp_getattr */
+#endif
     0,                              /* tp_setattr */
     0,                              /* tp_compare */
     0,                              /* tp_repr */
@@ -392,16 +448,20 @@ PCT_CounterBEType = {
     0,                              /* tp_hash */
     (ternaryfunc)CounterObject_call, /* tp_call */
     0,                              /* tp_str */
-    CounterBEObject_getattro,       /* tp_getattro */
+#ifdef IS_PY3K
+    CounterBEObject_getattro,		 /* tp_getattro */
+#else
+    0,                              /* tp_getattro */
+#endif
     0,                              /* tp_setattro */
     0,                              /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT,             /* tp_flags */
     "Counter (big endian)",         /* tp_doc */
+#ifdef IS_PY3K
 	0,								/*tp_traverse*/
 	0,								/*tp_clear*/
 	0,								/*tp_richcompare*/
 	0,								/*tp_weaklistoffset*/
-#if PYTHON_API_VERSION >= 1011          /* Python 2.2 and later */
 	0,								/*tp_iter*/
 	0,								/*tp_iternext*/
 	CounterBEObject_methods,		/*tp_methods*/
@@ -418,7 +478,7 @@ CounterLE_new(PyObject *self, PyObject *args, PyObject *kwargs)
     PCT_CounterObject *obj = NULL;
 
     /* Create the new object */
-    obj = PyObject_New(PCT_CounterObject, &PCT_CounterLEType);
+    obj = PyObject_New(PCT_CounterObject, &my_CounterLEType);
     if (obj == NULL) {
         return NULL;
     }
@@ -444,7 +504,7 @@ CounterBE_new(PyObject *self, PyObject *args, PyObject *kwargs)
     PCT_CounterObject *obj = NULL;
 
     /* Create the new object */
-    obj = PyObject_New(PCT_CounterObject, &PCT_CounterBEType);
+    obj = PyObject_New(PCT_CounterObject, &my_CounterBEType);
     if (obj == NULL) {
         return NULL;
     }
@@ -495,51 +555,30 @@ PyInit__counter(void)
 init_counter(void)
 #endif
 {
-    PyObject *m = NULL;
+    PyObject *m;
 
-    if (PyType_Ready(&PCT_CounterLEType) < 0)
-        goto errout;
-    if (PyType_Ready(&PCT_CounterBEType) < 0)
-        goto errout;
+    /* TODO - Is the error handling here correct? */
+#ifdef IS_PY3K
+	/* PyType_Ready automatically fills in ob_type with &PyType_Type if it's not already set */
+	if (PyType_Ready(&my_CounterLEType) < 0)
+		return NULL;
+	if (PyType_Ready(&my_CounterBEType) < 0)
+		return NULL;
 
     /* Initialize the module */
-#ifdef IS_PY3K
     m = PyModule_Create(&moduledef);
+    if (m == NULL)
+        return NULL;
+
+	return m;
 #else
     m = Py_InitModule("_counter", module_methods);
-#endif
     if (m == NULL)
-        goto errout;
-
-    /* Add the counter types to the module so that epydoc can see them, and so
-     * that we can access them in the block cipher modules. */
-    PyObject_SetAttrString(m, "CounterBE", (PyObject *)&PCT_CounterBEType);
-    PyObject_SetAttrString(m, "CounterLE", (PyObject *)&PCT_CounterLEType);
-
-    /* Allow block_template.c to do an ABI check */
-    PyModule_AddIntConstant(m, "_PCT_CTR_ABI_VERSION", PCT_CTR_ABI_VERSION);
-
-
-out:
-    /* Final error check */
-    if (m == NULL && !PyErr_Occurred()) {
-        PyErr_SetString(PyExc_ImportError, "can't initialize module");
-        goto errout;
-    }
-
-    /* Free local objects here */
-
-    /* Return */
-#ifdef IS_PY3K
-    return m;
-#else
-    return;
+        return;
+		
+	my_CounterLEType.ob_type = &PyType_Type;
+    my_CounterBEType.ob_type = &PyType_Type;
 #endif
-
-errout:
-    /* Free the module and other global objects here */
-    Py_CLEAR(m);
-    goto out;
 }
 
 /* vim:set ts=4 sw=4 sts=4 expandtab: */

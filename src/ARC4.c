@@ -26,8 +26,6 @@
  *
  */
 
-#include "pycrypto_common.h"
-
 #define MODULE_NAME _ARC4
 #define BLOCK_SIZE 1
 #define KEY_SIZE 0

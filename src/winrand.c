@@ -30,7 +30,8 @@
 
 /* Author: Mark Moraes */
 
-#include "pycrypto_common.h"
+#include "Python.h"
+#include "pycrypto_compat.h"
 
 #ifdef MS_WIN32
 
@@ -58,8 +59,14 @@ typedef struct
 /* Please see PEP3123 for a discussion of PyObject_HEAD and changes made in 3.x to make it conform to Standard C.
  * These changes also dictate using Py_TYPE to check type, and PyVarObject_HEAD_INIT(NULL, 0) to initialize
  */
+#ifdef IS_PY3K
+static PyTypeObject WRtype;
 #define is_WRobject(v) (Py_TYPE(v) == &WRtype)
+#else
 staticforward PyTypeObject WRtype;
+#define is_WRobject(v) ((v)->ob_type == &WRtype)
+#define PyLong_FromLong PyInt_FromLong /* for Python 2.x */
+#endif
 
 static void
 WRdealloc(PyObject *ptr)
@@ -191,7 +198,11 @@ static PyMethodDef WR_mod_methods[] = {
 };
 
 static PyObject *
+#ifdef IS_PY3K
 WRgetattro(PyObject *s, PyObject *attr)
+#else
+WRgetattr(PyObject *s, char *name)
+#endif
 {
 	WRobject *self = (WRobject*)s;
 	if (! is_WRobject(self)) {
@@ -199,31 +210,39 @@ WRgetattro(PyObject *s, PyObject *attr)
 		    "WinRandom trying to getattr with non-WinRandom object");
 		return NULL;
 	}
-	if (!PyString_Check(attr))
+#ifdef IS_PY3K
+	if (!PyUnicode_Check(attr))
 		goto generic;
-	if (PyString_CompareWithASCIIString(attr, "hcp") == 0)
-		return PyInt_FromLong((long) self->hcp);
+	if (PyUnicode_CompareWithASCIIString(attr, "hcp") == 0)
+#else
+	if (strcmp(name, "hcp") == 0)
+#endif
+		return PyLong_FromLong((long) self->hcp);
+#ifdef IS_PY3K
   generic:
-#if PYTHON_API_VERSION >= 1011          /* Python 2.2 and later */
 	return PyObject_GenericGetAttr(s, attr);
 #else
-	if (PyString_Check(attr) < 0) {
-		PyErr_SetObject(PyExc_AttributeError, attr);
-		return NULL;
-	}
-	return Py_FindMethod(WRmethods, (PyObject *)self, PyString_AsString(attr));
+	return Py_FindMethod(WRmethods, (PyObject *) self, name);
 #endif
 }
 
 static PyTypeObject WRtype =
  {
+ #ifdef IS_PY3K
 	PyVarObject_HEAD_INIT(NULL, 0)  /* deferred type init for compilation on Windows, type will be filled in at runtime */
+#else
+	PyObject_HEAD_INIT(NULL)
+	0,			/*ob_size*/
+#endif
  	"winrandom.WinRandom",	/*tp_name*/
  	sizeof(WRobject),	/*tp_size*/
  	0,			/*tp_itemsize*/
  	/* methods */
 	(destructor) WRdealloc,		/*tp_dealloc*/
 	0,				/*tp_print*/
+#ifndef IS_PY3K
+	WRgetattr,		/*tp_getattr*/
+#else
 	0,				/*tp_getattr*/
 	0,				/*tp_setattr*/
 	0,				/*tp_compare*/
@@ -243,7 +262,6 @@ static PyTypeObject WRtype =
 	0,				/*tp_clear*/
 	0,				/*tp_richcompare*/
 	0,				/*tp_weaklistoffset*/
-#if PYTHON_API_VERSION >= 1011          /* Python 2.2 and later */
 	0,				/*tp_iter*/
 	0,				/*tp_iternext*/
 	WRmethods,		/*tp_methods*/
@@ -264,26 +282,27 @@ static struct PyModuleDef moduledef = {
  };
 #endif
 
-PyMODINIT_FUNC
 #ifdef IS_PY3K
+PyMODINIT_FUNC
 PyInit_winrandom()
 #else
+void
 initwinrandom()
 #endif
 {
-	PyObject *m = NULL;
-
-	if (PyType_Ready(&WRtype) < 0)
-		goto errout;
-
-	/* Initialize the module */
+	PyObject *m;
 #ifdef IS_PY3K
-	m = PyModule_Create(&moduledef);
+	/* PyType_Ready automatically fills in ob_type with &PyType_Type if it's not already set */
+	if (PyType_Ready(&WRtype) < 0)
+		return NULL;
+    /* Initialize the module */
+    m = PyModule_Create(&moduledef);
+    if (m == NULL)
+        return NULL;
 #else
+	WRtype.ob_type = &PyType_Type;
 	m = Py_InitModule("winrandom", WR_mod_methods);
 #endif
-	if (m == NULL)
-		goto errout;
 
 	/* define Windows CSP Provider Types */
 #ifdef PROV_RSA_FULL
@@ -359,26 +378,12 @@ initwinrandom()
 	PyModule_AddStringConstant(m, "INTEL_DEF_PROV", INTEL_DEF_PROV);
 #endif
 
-out:
-	/* Final error check */
-	if (m == NULL && !PyErr_Occurred()) {
-		PyErr_SetString(PyExc_ImportError, "can't initialize module");
-		goto errout;
-	}
+	if (PyErr_Occurred())
+		Py_FatalError("can't initialize module winrandom");
 
-	/* Free local objects here */
-
-	/* Return */
 #ifdef IS_PY3K
 	return m;
-#else
-	return;
 #endif
-
-errout:
-	/* Free the module and other global objects here */
-	Py_CLEAR(m);
-	goto out;
 }
 /*
 

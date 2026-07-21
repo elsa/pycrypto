@@ -26,10 +26,19 @@
  * http://www.schneier.com/paper-blowfish-fse.html
  */
 
-#include "pycrypto_common.h"
-#include "Blowfish-tables.h"
+#include "config.h"
+#if HAVE_STDINT_H
+# include <stdint.h>
+#elif defined(__sun) || defined(__sun__)
+# include <sys/inttypes.h>
+#else
+# error "stdint.h not found"
+#endif
 #include <assert.h>
 #include <string.h>
+#include "Python.h"
+
+#include "Blowfish-tables.h"
 
 #define MODULE_NAME _Blowfish
 #define BLOCK_SIZE 8    /* 64-bit block size */
@@ -230,10 +239,6 @@ static void Blowfish_init(Blowfish_state *self, const unsigned char *key, int ke
 #define block_init Blowfish_init
 #define block_encrypt Blowfish_encrypt
 #define block_decrypt Blowfish_decrypt
-
-static void block_finalize(block_state *self)
-{
-}
 
 #include "block_template.c"
 

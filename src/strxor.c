@@ -21,11 +21,12 @@
  * SOFTWARE.
  * ===================================================================
  */
-
-#include "pycrypto_common.h"
+#include "Python.h"
 #include <stddef.h>
 #include <assert.h>
 #include <string.h>
+
+#include "pycrypto_compat.h"
 
 static const char rcsid[] = "$Id$";
 
@@ -232,40 +233,25 @@ PyInit_strxor(void)
 initstrxor(void)
 #endif
 {
-    PyObject *m = NULL;
+	PyObject *m;
 
     /* Initialize the module */
 #ifdef IS_PY3K
     m = PyModule_Create(&moduledef);
+    if (m == NULL)
+       return NULL;
 #else
     m = Py_InitModule("strxor", strxor_methods);
-#endif
     if (m == NULL)
-       goto errout;
-
+        return;
+#endif
+ 
     /* Perform runtime tests */
     runtime_test();
 
-out:
-    /* Final error check */
-    if (m == NULL && !PyErr_Occurred()) {
-        PyErr_SetString(PyExc_ImportError, "can't initialize module");
-        goto errout;
-    }
-
-    /* Free local objects here */
-
-    /* Return */
 #ifdef IS_PY3K
-    return m;
-#else
-    return;
+	return m;
 #endif
-
-errout:
-    /* Free the module and other global objects here */
-    Py_CLEAR(m);
-    goto out;
 }
 
 /* vim:set ts=4 sw=4 sts=4 expandtab: */

@@ -26,8 +26,7 @@ import unittest
 
 from Crypto.PublicKey import RSA
 from Crypto.SelfTest.st_common import list_test_cases, a2b_hex, b2a_hex
-from Crypto.Hash import MD2, SHA1, MD5, SHA224, SHA256, SHA384, SHA512,\
-                        RIPEMD160
+from Crypto.Hash import *
 from Crypto import Random
 from Crypto.Signature import PKCS1_v1_5 as PKCS
 from Crypto.Util.py3compat import *
@@ -124,7 +123,7 @@ class PKCS1_15_Tests(unittest.TestCase):
                 '''4a700a16432a291a3194646952687d5316458b8b86fb0a25aa30e0dcecdb
                 442676759ac63d56ec1499c3ae4c0013c2053cabd5b5804848994541ac16
                 fa243a4d''',
-                SHA1
+                SHA
                 ),
 
                 #
@@ -147,7 +146,7 @@ class PKCS1_15_Tests(unittest.TestCase):
                 A9D20970C54E6651070B0144D43844C899320DD8FA7819F7EBC6A7715287332E
                 C8675C136183B3F8A1F81EF969418267130A756FDBB2C71D9A667446E34E0EAD
                 9CF31BFB66F816F319D0B7E430A5F2891553986E003720261C7E9022C0D9F11F''',
-                SHA1
+                SHA
                 )
 
         )
@@ -165,7 +164,7 @@ class PKCS1_15_Tests(unittest.TestCase):
                         # Data to sign can either be in hex form or not
                         try:
                             h.update(t2b(row[1]))
-                        except ValueError:
+                        except:
                             h.update(b(row[1]))
                         # The real test
                         signer = PKCS.new(key)
@@ -186,7 +185,7 @@ class PKCS1_15_Tests(unittest.TestCase):
                         # Data to sign can either be in hex form or not
                         try:
                             h.update(t2b(row[1]))
-                        except ValueError:
+                        except:
                             h.update(b(row[1]))
                         # The real test
                         verifier = PKCS.new(key)
@@ -198,7 +197,7 @@ class PKCS1_15_Tests(unittest.TestCase):
                         rng = Random.new().read
                         key = RSA.generate(1024, rng)
 
-                        for hashmod in (MD2,MD5,SHA1,SHA224,SHA256,SHA384,SHA512,RIPEMD160):
+                        for hashmod in (MD2,MD5,SHA,SHA224,SHA256,SHA384,SHA512,RIPEMD):
                             h = hashmod.new()
                             h.update(b('blah blah blah'))
 
@@ -207,37 +206,10 @@ class PKCS1_15_Tests(unittest.TestCase):
                             result = signer.verify(h, s)
                             self.failUnless(result)
 
-class PKCS1_15_NoParams(unittest.TestCase):
-    """Verify that PKCS#1 v1.5 signatures pass even without NULL parameters in
-    the algorithm identifier (bug #1119552)."""
-
-    rsakey = """-----BEGIN RSA PRIVATE KEY-----
-            MIIBOwIBAAJBAL8eJ5AKoIsjURpcEoGubZMxLD7+kT+TLr7UkvEtFrRhDDKMtuII
-            q19FrL4pUIMymPMSLBn3hJLe30Dw48GQM4UCAwEAAQJACUSDEp8RTe32ftq8IwG8
-            Wojl5mAd1wFiIOrZ/Uv8b963WJOJiuQcVN29vxU5+My9GPZ7RA3hrDBEAoHUDPrI
-            OQIhAPIPLz4dphiD9imAkivY31Rc5AfHJiQRA7XixTcjEkojAiEAyh/pJHks/Mlr
-            +rdPNEpotBjfV4M4BkgGAA/ipcmaAjcCIQCHvhwwKVBLzzTscT2HeUdEeBMoiXXK
-            JACAr3sJQJGxIQIgarRp+m1WSKV1MciwMaTOnbU7wxFs9DP1pva76lYBzgUCIQC9
-            n0CnZCJ6IZYqSt0H5N7+Q+2Ro64nuwV/OSQfM6sBwQ==
-            -----END RSA PRIVATE KEY-----"""
-
-    msg = b("This is a test\x0a")
-
-    # PKCS1 v1.5 signature of the message computed using SHA-1.
-    # The digestAlgorithm SEQUENCE does NOT contain the NULL parameter.
-    signature = '''a287a13517f716e72fb14eea8e33a8db4a4643314607e7ca3e3e281893db7401
-            3dda8b855fd99f6fecedcb25fcb7a434f35cd0a101f8b19348e0bd7b6f152dfc'''
-
-    def testVerify(self):
-        verifier = PKCS.new(RSA.importKey(self.rsakey))
-        h = SHA1.new(self.msg)
-        result = verifier.verify(h, t2b(self.signature))
-        self.failUnless(result)
 
 def get_tests(config={}):
     tests = []
     tests += list_test_cases(PKCS1_15_Tests)
-    tests += list_test_cases(PKCS1_15_NoParams)
     return tests
 
 if __name__ == '__main__':

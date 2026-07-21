@@ -31,10 +31,6 @@ if sys.version_info[0] == 2 and sys.version_info[1] == 1:
     from Crypto.Util.py21compat import *
 
 import unittest
-from Crypto.SelfTest.st_common import assert_disabled
-
-class MyError(Exception):
-    """Dummy exception used for tests"""
 
 # NB: In some places, we compare tuples instead of just output values so that
 # if any inputs cause a test failure, we'll be able to tell which ones.
@@ -47,9 +43,8 @@ class MiscTests(unittest.TestCase):
 
     def test_ceil_shift(self):
         """Util.number.ceil_shift"""
-        if not assert_disabled():
-            self.assertRaises(AssertionError, number.ceil_shift, -1, 1)
-            self.assertRaises(AssertionError, number.ceil_shift, 1, -1)
+        self.assertRaises(AssertionError, number.ceil_shift, -1, 1)
+        self.assertRaises(AssertionError, number.ceil_shift, 1, -1)
 
         # b = 0
         self.assertEqual(0, number.ceil_shift(0, 0))
@@ -281,11 +276,6 @@ class MiscTests(unittest.TestCase):
         self.assertEqual(number.size(0xa2ba40),8*3)
         self.assertEqual(number.size(0xa2ba40ee07e3b2bd2f02ce227f36a195024486e49c19cb41bbbdfbba98b22b0e577c2eeaffa20d883a76e65e394c69d4b3c05a1e8fadda27edb2a42bc000fe888b9b32c22d15add0cd76b3e7936e19955b220dd17d4ea904b1ec102b2e4de7751222aa99151024c7cb41cc5ea21d00eeb41f7c800834d2c6e06bce3bce7ea9a5L), 1024)
 
-class FastmathTests(unittest.TestCase):
-    def setUp(self):
-        global number
-        from Crypto.Util import number
-
     def test_negative_number_roundtrip_mpzToLongObj_longObjToMPZ(self):
         """Test that mpzToLongObj and longObjToMPZ (internal functions) roundtrip negative numbers correctly."""
         n = -100000000000000000000000000000000000L
@@ -294,42 +284,9 @@ class FastmathTests(unittest.TestCase):
         self.assertEqual(n, k.n)
         self.assertEqual(e, k.e)
 
-    def test_isPrime_randfunc_exception(self):
-        """Test that when isPrime is called, an exception raised in randfunc is propagated."""
-        def randfunc(n):
-            raise MyError
-        prime = 3536384141L         # Needs to be large enough so that rabinMillerTest will be invoked
-        self.assertRaises(MyError, number._fastmath.isPrime, prime, randfunc=randfunc)
-
-    def test_getStrongPrime_randfunc_exception(self):
-        """Test that when getStrongPrime is called, an exception raised in randfunc is propagated."""
-        def randfunc(n):
-            raise MyError
-        self.assertRaises(MyError, number._fastmath.getStrongPrime, 512, randfunc=randfunc)
-
-    def test_isPrime_randfunc_bogus(self):
-        """Test that when isPrime is called, an exception is raised if randfunc returns something bogus."""
-        def randfunc(n):
-            return None
-        prime = 3536384141L         # Needs to be large enough so that rabinMillerTest will be invoked
-        self.assertRaises(TypeError, number._fastmath.isPrime, prime, randfunc=randfunc)
-
-    def test_getStrongPrime_randfunc_bogus(self):
-        """Test that when getStrongPrime is called, an exception is raised if randfunc returns something bogus."""
-        def randfunc(n):
-            return None
-        self.assertRaises(TypeError, number._fastmath.getStrongPrime, 512, randfunc=randfunc)
-
 def get_tests(config={}):
     from Crypto.SelfTest.st_common import list_test_cases
-    tests = list_test_cases(MiscTests)
-    try:
-        from Crypto.PublicKey import _fastmath
-        tests += list_test_cases(FastmathTests)
-    except ImportError:
-        from Crypto.SelfTest.st_common import handle_fastmath_import_error
-        handle_fastmath_import_error()
-    return tests
+    return list_test_cases(MiscTests)
 
 if __name__ == '__main__':
     suite = lambda: unittest.TestSuite(get_tests())

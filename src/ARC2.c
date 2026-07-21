@@ -41,17 +41,17 @@
  *
  */
 
-#include "pycrypto_common.h"
-#include <string.h>
+#include <string.h>  
+#include "Python.h"
 
 #define MODULE_NAME _ARC2
 #define BLOCK_SIZE 8
 #define KEY_SIZE 0
 #define PCT_ARC2_MODULE  /* Defined to get ARC2's additional keyword arguments */
 
-typedef uint32_t U32;
-typedef uint16_t U16;
-typedef uint8_t U8;
+typedef unsigned int U32;
+typedef unsigned short U16;
+typedef unsigned char U8;
 
 typedef struct 
 {
@@ -216,9 +216,5 @@ block_init(block_state *self, U8 *key, int keylength)
 	} while (i--);
 }
 
-static void
-block_finalize(block_state* self)
-{
-}
 
 #include "block_template.c"

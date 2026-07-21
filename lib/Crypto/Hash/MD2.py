@@ -18,63 +18,57 @@
 # SOFTWARE.
 # ===================================================================
 
-"""SHA-1 cryptographic hash algorithm.
+"""MD2 cryptographic hash algorithm.
 
-SHA-1_ produces the 160 bit digest of a message.
+MD2 is specified in RFC1319_ and it produces the 128 bit digest of a message.
 
-    >>> from Crypto.Hash import SHA
+    >>> from Crypto.Hash import MD2
     >>>
-    >>> h = SHA.new()
+    >>> h = MD2.new()
     >>> h.update(b'Hello')
     >>> print h.hexdigest()
 
-*SHA* stands for Secure Hash Algorithm.
+MD2 stand for Message Digest version 2, and it was invented by Rivest in 1989.
 
-This algorithm is not considered secure. Do not use it for new designs.
+This algorithm is both slow and insecure. Do not use it for new designs.
 
-.. _SHA-1: http://csrc.nist.gov/publications/fips/fips180-2/fips180-2.pdf
+.. _RFC1319: http://tools.ietf.org/html/rfc1319
 """
 
 _revision__ = "$Id$"
 
-__all__ = ['new', 'digest_size', 'SHA1Hash' ]
+__all__ = ['new', 'digest_size', 'MD2Hash' ]
 
 from Crypto.Util.py3compat import *
 from Crypto.Hash.hashalgo import HashAlgo
 
-try:
-    # The sha module is deprecated in Python 2.6, so use hashlib when possible.
-    import hashlib
-    hashFactory = hashlib.sha1
+import Crypto.Hash._MD2 as _MD2
+hashFactory = _MD2
 
-except ImportError:
-    import sha
-    hashFactory = sha
-
-class SHA1Hash(HashAlgo):
-    """Class that implements a SHA-1 hash
+class MD2Hash(HashAlgo):
+    """Class that implements an MD2 hash
     
     :undocumented: block_size
     """
 
     #: ASN.1 Object identifier (OID)::
     #:
-    #:  id-sha1    OBJECT IDENTIFIER ::= {
-    #:      iso(1) identified-organization(3) oiw(14) secsig(3)
-    #:       algorithms(2) 26
+    #:  id-md2 OBJECT IDENTIFIER ::= {
+    #:      iso(1) member-body(2) us(840) rsadsi(113549)
+    #:       digestAlgorithm(2) 2
     #:  }
     #:
-    #: This value uniquely identifies the SHA-1 algorithm.
-    oid = b('\x06\x05\x2b\x0e\x03\x02\x1a')
+    #: This value uniquely identifies the MD2 algorithm.
+    oid = b('\x06\x08\x2a\x86\x48\x86\xf7\x0d\x02\x02')
 
-    digest_size = 20
-    block_size = 64
+    digest_size = 16
+    block_size = 16
 
     def __init__(self, data=None):
         HashAlgo.__init__(self, hashFactory, data)
 
     def new(self, data=None):
-        return SHA1Hash(data)
+        return MD2Hash(data)
 
 def new(data=None):
     """Return a fresh instance of the hash object.
@@ -82,17 +76,16 @@ def new(data=None):
     :Parameters:
        data : byte string
         The very first chunk of the message to hash.
-        It is equivalent to an early call to `SHA1Hash.update()`.
+        It is equivalent to an early call to `MD2Hash.update()`.
         Optional.
 
-    :Return: A `SHA1Hash` object
+    :Return: An `MD2Hash` object
     """
-    return SHA1Hash().new(data)
+    return MD2Hash().new(data)
 
 #: The size of the resulting hash in bytes.
-digest_size = SHA1Hash.digest_size
+digest_size = MD2Hash.digest_size
 
 #: The internal block size of the hash algorithm in bytes.
-block_size = SHA1Hash.block_size
-
+block_size = MD2Hash.block_size
 

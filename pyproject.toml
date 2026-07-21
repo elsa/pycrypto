@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pycrypto"
-version = "2.6.1"
+version = "2.6.1.post2"
 description = "Cryptographic modules for Python."
 authors = ["Darsey Litzenberger <dlitz@dlitz.net>"]
 license = "Public Domain"
