@@ -33,6 +33,7 @@
 #include <string.h>
 #endif
 
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 #include "pycrypto_compat.h"
 #include "modsupport.h"
@@ -100,7 +101,7 @@ ALGnew(PyObject *self, PyObject *args, PyObject *kwdict)
 {
 	unsigned char *key;
 	ALGobject * new;
-	int keylen;
+	Py_ssize_t keylen;
 
 	new = newALGobject();
 	if (!PyArg_ParseTupleAndKeywords(args, kwdict, "s#", kwlist, 
@@ -140,7 +141,7 @@ static PyObject *
 ALG_Encrypt(ALGobject *self, PyObject *args)
 {
 	unsigned char *buffer, *str;
-	int len;
+	Py_ssize_t len;
 	PyObject *result;
 
 	if (!PyArg_Parse(args, "s#", &str, &len))
@@ -172,7 +173,7 @@ static PyObject *
 ALG_Decrypt(ALGobject *self, PyObject *args)
 {
 	unsigned char *buffer, *str;
-	int len;
+	Py_ssize_t len;
 	PyObject *result;
 
 	if (!PyArg_Parse(args, "s#", &str, &len))

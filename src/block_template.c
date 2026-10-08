@@ -33,6 +33,7 @@
 #include <string.h>
 #endif
 
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 #include "pycrypto_compat.h"
 #include "modsupport.h" 
@@ -123,7 +124,8 @@ ALGnew(PyObject *self, PyObject *args, PyObject *kwdict)
 {
 	unsigned char *key, *IV;
 	ALGobject * new=NULL;
-	int keylen, IVlen=0, mode=MODE_ECB, segment_size=0;
+	Py_ssize_t keylen, IVlen=0;
+	int mode=MODE_ECB, segment_size=0;
 	PyObject *counter = NULL;
 	int counter_shortcut = 0;
 #ifdef PCT_ARC2_MODULE
@@ -253,7 +255,8 @@ ALG_Encrypt(ALGobject *self, PyObject *args)
 {
 	unsigned char *buffer, *str;
 	unsigned char temp[BLOCK_SIZE];
-	int i, j, len;
+	int i, j;
+	Py_ssize_t len;
 	PyObject *result;
   
 	if (!PyArg_Parse(args, "s#", &str, &len))
@@ -485,7 +488,8 @@ ALG_Decrypt(ALGobject *self, PyObject *args)
 {
 	unsigned char *buffer, *str;
 	unsigned char temp[BLOCK_SIZE];
-	int i, j, len;
+	int i, j;
+	Py_ssize_t len;
 	PyObject *result;
 
 	/* CTR mode decryption is identical to encryption */

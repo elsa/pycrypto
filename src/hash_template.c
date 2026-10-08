@@ -30,6 +30,7 @@
 #ifdef _HAVE_STDC_HEADERS
 #include <string.h>
 #endif
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 #include "pycrypto_compat.h"
 
@@ -163,7 +164,7 @@ static PyObject *
 ALG_update(ALGobject *self, PyObject *args)
 {
 	unsigned char *cp;
-	int len;
+	Py_ssize_t len;
 
 	if (!PyArg_ParseTuple(args, "s#", &cp, &len))
 		return NULL;
@@ -273,7 +274,7 @@ ALG_new(PyObject *self, PyObject *args)
 {
         ALGobject *new;
 	unsigned char *cp = NULL;
-	int len;
+	Py_ssize_t len;
 	
 	if ((new = newALGobject()) == NULL)
 		return NULL;

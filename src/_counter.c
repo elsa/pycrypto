@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <string.h>
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 #include "pycrypto_compat.h"
 #include "_counter.h"
